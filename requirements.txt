@@ -1,0 +1,5 @@
+aiogram
+google-api-python-client
+google-auth
+google-auth-oauthlib
+pydantic_settings

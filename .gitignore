@@ -1,1 +1,6 @@
 .env
+*.docx
+venv/
+credentials.json
+token.json
+.DS_Store
