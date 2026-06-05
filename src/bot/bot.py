@@ -1,0 +1,36 @@
+from aiogram import Bot, Dispatcher, types, F
+from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.fsm.context import FSMContext
+import asyncio
+import logging
+import sys
+from pathlib import Path
+
+# Add src directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from config import settings
+from bot import bot_handlers
+
+# Инициализация логирования
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+storage = MemoryStorage()
+bot = Bot(token=settings.TELEGRAM_BOT_TOKEN)
+dp = Dispatcher(storage=storage)
+
+# Подключение роутера с обработчиками
+dp.include_router(bot_handlers.router)
+
+async def main():
+    """Главная функция бота"""
+    try:
+        logger.info("Бот запущен")
+        await dp.start_polling(bot)
+    finally:
+        await bot.session.close()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
