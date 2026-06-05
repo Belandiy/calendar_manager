@@ -6,11 +6,12 @@ import logging
 import sys
 from pathlib import Path
 
-# Add src directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Добавляем корневой каталог проекта в sys.path для корректного импорта
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from config import settings
-from bot import bot_handlers
+from src.config import settings
+from src.bot import bot_handlers
+from src.services.db import init_db
 
 # Инициализация логирования
 logging.basicConfig(level=logging.INFO)
@@ -25,6 +26,9 @@ dp.include_router(bot_handlers.router)
 
 async def main():
     """Главная функция бота"""
+    # Инициализация БД
+    await init_db()
+    
     try:
         logger.info("Бот запущен")
         await dp.start_polling(bot)
