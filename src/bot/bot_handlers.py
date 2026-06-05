@@ -5,11 +5,11 @@ import logging
 from aiogram import Router, F
 from aiogram import Router, F
 from aiogram.types import Message
-from aiogram.filters import Command
+from aiogram.filters import Command, CommandObject
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
-from src.services.db import user_exists
+from src.services.db import get_reminder, save_reminder, user_exists
 from src.services.auth import get_google_auth_url, process_auth_response
 from src.services.calendar import get_upcoming_events, format_events
 
@@ -27,7 +27,10 @@ async def start_command(message: Message, state: FSMContext):
     if await user_exists(user_id):
         await message.answer(
             f"👋 Привет, {message.from_user.first_name}! Рад тебя видеть снова.\n\n"
-            "Используй команду /events, чтобы увидеть свои ближайшие события."
+            "Используй команду /events, чтобы увидеть свои ближайшие события.\n"
+            "Используй команду /set_reminder, чтобы установить напоминание.\n"
+            "Используй команду /show_reminder, чтобы увидеть текущее напоминание.\n"
+            "Используй команду /history, чтобы увидеть историю событий."
         )
     else:
         auth_url, code_verifier = await get_google_auth_url()
@@ -63,6 +66,46 @@ async def events_command(message: Message):
         formatted_text = format_events(events)
         await wait_message.edit_text(formatted_text, parse_mode="Markdown")
 
+@router.message(Command("set_reminder"))
+async def set_reminder(message: Message, command: CommandObject):
+    """Пример обработчика для установки напоминания"""
+    user_id = message.from_user.id
+    valid_reminder = command.args and command.args.isdigit() and int(command.args) > 0
+    if not valid_reminder:
+        reminder = "30"  # Если аргументов нет или они не цифры, по умолчанию 30 минут
+    else:
+        reminder = command.args
+
+    # Сначала проверяем, авторизован ли пользователь
+    if not await user_exists(user_id):
+        await message.answer("❌ Вы не авторизованы. Введите /start для подключения календаря.")
+        return
+    
+    await save_reminder(message.from_user.id, reminder)
+
+    if not valid_reminder:
+        await message.answer(f"Напоминание установлено по умолчанию: {reminder} минут!")
+        return
+    await message.answer(f"Напоминание '{reminder}' установлено!")
+
+@router.message(Command("show_reminder"))
+async def show_reminder(message: Message):
+    """Пример обработчика для показа текущего напоминания (пока заглушка)"""
+    user_id = message.from_user.id
+
+    # Сначала проверяем, авторизован ли пользователь
+    if not await user_exists(user_id):
+        await message.answer("❌ Вы не авторизованы. Введите /start для подключения календаря.")
+        return
+
+    current_reminder = await get_reminder(message.from_user.id)
+    await message.answer(f"Напоминание установлено каждые '{current_reminder}' минут!") 
+
+@router.message(Command("history"))
+async def show_history(message: Message):
+    """Пример обработчика для показа истории событий (пока заглушка)"""
+    await message.answer("Здесь будет история твоих 10 последних событий! (Пока это заглушка)")
+
 @router.message(AuthStates.waiting_for_auth_url)
 async def handle_auth_url(message: Message, state: FSMContext):
 
@@ -95,21 +138,3 @@ async def handle_auth_url(message: Message, state: FSMContext):
         await state.clear()
     else:
         await message.answer("❌ Ошибка при обработке ссылки. Попробуй еще раз или проверь ссылку.")
-
-@router.message(Command("events"))
-async def list_events(message: Message):
-    """Пример обработчика для показа событий календаря (пока заглушка)"""
-    logger.info(f"Получена команда /events от пользователя {message.from_user.id}")
-    events_list = get_coming_events()
-
-    await message.answer("Здесь будет список твоих ближайших событий! (Пока это заглушка)")
-
-@router.message(Command("set_reminder <reminder>"))
-async def set_reminder(message: Message, reminder: str):
-    """Пример обработчика для установки напоминания (пока заглушка)"""
-    await message.answer(f"Напоминание '{reminder}' установлено! (Пока это заглушка)")
-
-@router.message(Command("history"))
-async def show_history(message: Message):
-    """Пример обработчика для показа истории событий (пока заглушка)"""
-    await message.answer("Здесь будет история твоих 10 последних событий! (Пока это заглушка)")
