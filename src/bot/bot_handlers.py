@@ -3,6 +3,7 @@
 """
 import logging
 from aiogram import Router, F
+from aiogram import Router, F
 from aiogram.types import Message
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -10,6 +11,7 @@ from aiogram.fsm.state import State, StatesGroup
 
 from src.services.db import user_exists
 from src.services.auth import get_google_auth_url, process_auth_response
+from src.services.calendar import get_upcoming_events, format_events
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -23,7 +25,10 @@ async def start_command(message: Message, state: FSMContext):
     user_id = message.from_user.id
 
     if await user_exists(user_id):
-        await message.answer(f"👋 Привет, {message.from_user.first_name}! Рад тебя видеть снова.")
+        await message.answer(
+            f"👋 Привет, {message.from_user.first_name}! Рад тебя видеть снова.\n\n"
+            "Используй команду /events, чтобы увидеть свои ближайшие события."
+        )
     else:
         auth_url, code_verifier = await get_google_auth_url()
         # Сохраняем verifier в состоянии, чтобы использовать его при проверке ссылки
@@ -38,8 +43,29 @@ async def start_command(message: Message, state: FSMContext):
             "4. **Скопируй всю ссылку** из адресной строки и пришли её мне."
         )
 
+@router.message(Command("events"))
+async def events_command(message: Message):
+    """Обработчик команды /events - показ ближайших событий"""
+    user_id = message.from_user.id
+
+    # Сначала проверяем, авторизован ли пользователь
+    if not await user_exists(user_id):
+        await message.answer("❌ Вы не авторизованы. Введите /start для подключения календаря.")
+        return
+
+    wait_message = await message.answer("🔄 Получаю данные из календаря...")
+
+    events = await get_upcoming_events(user_id, max_results=5)
+
+    if events is None:
+        await wait_message.edit_text("❌ Ошибка авторизации. Попробуйте /start заново.")
+    else:
+        formatted_text = format_events(events)
+        await wait_message.edit_text(formatted_text, parse_mode="Markdown")
+
 @router.message(AuthStates.waiting_for_auth_url)
 async def handle_auth_url(message: Message, state: FSMContext):
+
     """Обработка ссылки авторизации от пользователя"""
     logger.info(f"Получено сообщение в состоянии waiting_for_auth_url: {message.text[:50]}...")
     
@@ -69,3 +95,21 @@ async def handle_auth_url(message: Message, state: FSMContext):
         await state.clear()
     else:
         await message.answer("❌ Ошибка при обработке ссылки. Попробуй еще раз или проверь ссылку.")
+
+@router.message(Command("events"))
+async def list_events(message: Message):
+    """Пример обработчика для показа событий календаря (пока заглушка)"""
+    logger.info(f"Получена команда /events от пользователя {message.from_user.id}")
+    events_list = get_coming_events()
+
+    await message.answer("Здесь будет список твоих ближайших событий! (Пока это заглушка)")
+
+@router.message(Command("set_reminder <reminder>"))
+async def set_reminder(message: Message, reminder: str):
+    """Пример обработчика для установки напоминания (пока заглушка)"""
+    await message.answer(f"Напоминание '{reminder}' установлено! (Пока это заглушка)")
+
+@router.message(Command("history"))
+async def show_history(message: Message):
+    """Пример обработчика для показа истории событий (пока заглушка)"""
+    await message.answer("Здесь будет история твоих 10 последних событий! (Пока это заглушка)")

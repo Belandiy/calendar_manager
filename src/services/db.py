@@ -90,3 +90,25 @@ async def save_user(telegram_id: int, username: str, google_token: str) -> None:
         logger.error(f"Ошибка при сохранении пользователя: {e}")
     finally:
         conn.close()
+
+async def get_user_token(telegram_id: int) -> str | None:
+    """
+    Получение Google токена пользователя по telegram_id
+    
+    Args:
+        telegram_id: ID пользователя в Telegram
+        
+    Returns:
+        JSON строка с токеном или None
+    """
+    conn = await get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT google_token FROM users WHERE telegram_id = ?", (telegram_id,))
+        result = cursor.fetchone()
+        return result[0] if result else None
+    except Exception as e:
+        logger.error(f"Ошибка при получении токена пользователя {telegram_id}: {e}")
+        return None
+    finally:
+        conn.close()
