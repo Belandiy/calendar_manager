@@ -70,7 +70,7 @@ async def events_command(message: Message):
 async def set_reminder(message: Message, command: CommandObject):
     """Пример обработчика для установки напоминания"""
     user_id = message.from_user.id
-    valid_reminder = command.args and command.args.isdigit() and int(command.args) > 0
+    valid_reminder = command.args and command.args.isdigit() and int(command.args) > 0 and int(command.args) <= 1440  # Ограничение от 1 до 1440 минут (24 часа)
     if not valid_reminder:
         reminder = "30"  # Если аргументов нет или они не цифры, по умолчанию 30 минут
     else:
