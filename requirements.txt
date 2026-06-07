@@ -4,3 +4,4 @@ google-auth
 google-auth-oauthlib
 pydantic-settings
 APScheduler==3.10.1
+cryptography==42.0.5

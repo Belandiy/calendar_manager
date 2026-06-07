@@ -2,10 +2,23 @@ import logging
 import os
 from sqlite3 import Connection, connect
 from pathlib import Path
+from cryptography.fernet import Fernet
+from src.config import settings
 
 # Инициализация логирования
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Настройка шифрования
+cipher_suite = Fernet(settings.ENCRYPTION_KEY.encode())
+
+def encrypt_data(data: str) -> str:
+    """Шифрует строку"""
+    return cipher_suite.encrypt(data.encode()).decode()
+
+def decrypt_data(encrypted_data: str) -> str:
+    """Дешифрует строку"""
+    return cipher_suite.decrypt(encrypted_data.encode()).decode()
 
 # Путь к БД относительно корня проекта
 BASE_DIR = Path(__file__).parent.parent.parent
@@ -90,6 +103,7 @@ async def save_user(telegram_id: int, username: str, google_token: str) -> None:
         username: Имя пользователя
         google_token: JSON строка с токенами Google
     """
+    encrypted_token = encrypt_data(google_token)
     conn = await get_db_connection()
     cursor = conn.cursor()
     try:
@@ -99,7 +113,7 @@ async def save_user(telegram_id: int, username: str, google_token: str) -> None:
             ON CONFLICT(telegram_id) DO UPDATE SET
                 username = excluded.username,
                 google_token = excluded.google_token
-        """, (telegram_id, username, google_token))
+        """, (telegram_id, username, encrypted_token))
         conn.commit()
         logger.info(f"Пользователь {telegram_id} сохранен/обновлен.")
     except Exception as e:
@@ -122,7 +136,9 @@ async def get_user_token(telegram_id: int) -> str | None:
     try:
         cursor.execute("SELECT google_token FROM users WHERE telegram_id = ?", (telegram_id,))
         result = cursor.fetchone()
-        return result[0] if result else None
+        if result and result[0]:
+            return decrypt_data(result[0])
+        return None
     except Exception as e:
         logger.error(f"Ошибка при получении токена пользователя {telegram_id}: {e}")
         return None
