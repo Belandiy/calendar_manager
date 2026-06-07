@@ -11,7 +11,7 @@ from aiogram.fsm.state import State, StatesGroup
 
 from src.services.db import get_reminder, save_reminder, user_exists
 from src.services.auth import get_google_auth_url, process_auth_response
-from src.services.calendar import get_upcoming_events, format_events
+from src.services.calendar import get_past_events, get_upcoming_events, format_events
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -63,7 +63,7 @@ async def events_command(message: Message):
     if events is None:
         await wait_message.edit_text("❌ Ошибка авторизации. Попробуйте /start заново.")
     else:
-        formatted_text = format_events(events)
+        formatted_text = format_events(events, title="Ваши ближайшие события")
         await wait_message.edit_text(formatted_text, parse_mode="Markdown")
 
 @router.message(Command("set_reminder"))
@@ -90,7 +90,7 @@ async def set_reminder(message: Message, command: CommandObject):
 
 @router.message(Command("show_reminder"))
 async def show_reminder(message: Message):
-    """Пример обработчика для показа текущего напоминания (пока заглушка)"""
+    """Пример обработчика для показа текущего напоминания"""
     user_id = message.from_user.id
 
     # Сначала проверяем, авторизован ли пользователь
@@ -103,8 +103,23 @@ async def show_reminder(message: Message):
 
 @router.message(Command("history"))
 async def show_history(message: Message):
-    """Пример обработчика для показа истории событий (пока заглушка)"""
-    await message.answer("Здесь будет история твоих 10 последних событий! (Пока это заглушка)")
+    """Обработчик команды /history - показ последних 10 прошедших событий"""
+    user_id = message.from_user.id
+
+    # Сначала проверяем, авторизован ли пользователь
+    if not await user_exists(user_id):
+        await message.answer("❌ Вы не авторизованы. Введите /start для подключения календаря.")
+        return
+    
+    wait_message = await message.answer("🔄 Загружаю историю событий...")
+    
+    past_events = await get_past_events(user_id, max_results=10)
+
+    if past_events is None:
+        await wait_message.edit_text("❌ Ошибка при получении истории событий.")
+    else:
+        formatted_text = format_events(past_events, title="Ваши последние 10 событий")
+        await wait_message.edit_text(formatted_text, parse_mode="Markdown")
 
 @router.message(AuthStates.waiting_for_auth_url)
 async def handle_auth_url(message: Message, state: FSMContext):

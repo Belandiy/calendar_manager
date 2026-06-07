@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 # Скоупы для доступа к календарю
 SCOPES = ['https://www.googleapis.com/auth/calendar']
 
-async def get_calendar_service(telegram_id: int):
+async def get_calendar_service(telegram_id: int) -> build:
     """Создает и возвращает сервис Google Calendar для пользователя"""
     token_json = await get_user_token(telegram_id)
     if not token_json:
@@ -27,7 +27,6 @@ async def get_calendar_service(telegram_id: int):
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
             # Здесь в идеале нужно сохранить обновленный токен обратно в БД
-            # Но для простоты пока оставим так
             
         service = build('calendar', 'v3', credentials=creds)
         return service
@@ -35,14 +34,14 @@ async def get_calendar_service(telegram_id: int):
         logger.error(f"Ошибка при создании сервиса календаря: {e}")
         return None
 
-async def get_upcoming_events(telegram_id: int, max_results: int = 5):
+async def get_upcoming_events(telegram_id: int, max_results: int = 5) -> list:
     """Получение ближайших событий из календаря пользователя"""
     service = await get_calendar_service(telegram_id)
     if not service:
         return None
         
     try:
-        now = datetime.datetime.utcnow().isoformat() + 'Z'  # 'Z' означает UTC время
+        now = datetime.datetime.utcnow().isoformat() + 'Z'
         
         events_result = service.events().list(
             calendarId='primary', 
@@ -58,33 +57,70 @@ async def get_upcoming_events(telegram_id: int, max_results: int = 5):
         logger.error(f'Ошибка при получении событий: {error}')
         return []
 
-def format_events(events):
+async def get_past_events(telegram_id: int, max_results: int = 10):
+    """Получение 10 последних прошедших событий пользователя"""
+    service = await get_calendar_service(telegram_id)
+    if not service:
+        return None
+
+    try:
+        now_dt = datetime.datetime.utcnow()
+        all_events = []
+        
+        time_min_dt = now_dt - datetime.timedelta(days=30)
+        time_min = time_min_dt.isoformat() + 'Z'
+        time_max = now_dt.isoformat() + 'Z'
+
+        events_result = service.events().list(
+            calendarId='primary', 
+            timeMin=time_min,
+            timeMax=time_max,
+            singleEvents=True,
+            orderBy='startTime',
+            maxResults=250 
+        ).execute()
+
+        all_events = events_result.get('items', [])
+        
+        # Сортируем полученные события (от новых к старым) по времени НАЧАЛА
+        sorted_events = sorted(
+            all_events, 
+            key=lambda x: x['start'].get('dateTime', x['start'].get('date')), 
+            reverse=True
+        )
+
+        return sorted_events[:max_results]
+    except HttpError as error:
+        logger.error(f'Ошибка при получении истории: {error}')
+        return []
+
+def format_events(events, title="Ближайшие события"):
     """Форматирует список событий в красивую строку для Telegram"""
     if not events:
-        return "📅 У вас нет предстоящих событий."
-        
-    res = "📅 **Ваши ближайшие события:**\n\n"
+        return f"📅 {title} не найдены."
+
+    res = f"📅 **{title}:**\n\n"
     for event in events:
         # Получаем начало и конец события
         start = event['start'].get('dateTime', event['start'].get('date'))
         end = event['end'].get('dateTime', event['end'].get('date'))
-        
+
         # Форматируем время
         try:
             if 'T' in start:
                 # Событие с конкретным временем
                 dt_start = datetime.datetime.fromisoformat(start.replace('Z', '+00:00'))
                 dt_end = datetime.datetime.fromisoformat(end.replace('Z', '+00:00'))
-                
-                time_range = f"{dt_start.strftime('%d.%m %H:%M')} — {dt_end.strftime('%H:%M')}"
+
+                time_range = f"{dt_start.strftime('%d.%m %H:%M')}—{dt_end.strftime('%H:%M')}"
             else:
                 # Событие на весь день
                 time_range = f"{start} (весь день)"
         except Exception:
             # Фолбэк на случай ошибки парсинга
             time_range = f"{start[:16].replace('T', ' ')}"
-            
+
         summary = event.get('summary', '(Без названия)')
         res += f"• `{time_range}` — **{summary}**\n"
-        
+
     return res
