@@ -10,6 +10,6 @@ class Settings(BaseSettings):
     TELEGRAM_BOT_TOKEN: str
     GOOGLE_CLIENT_ID: str
     GOOGLE_CLIENT_SECRET: str
-    ENCRYPTION_KEY: str
+    ENCRYPTION_KEY: str | None = None
 
 settings = Settings()

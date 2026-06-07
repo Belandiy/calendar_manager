@@ -10,15 +10,23 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Настройка шифрования
-cipher_suite = Fernet(settings.ENCRYPTION_KEY.encode())
+cipher_suite = Fernet(settings.ENCRYPTION_KEY.encode()) if settings.ENCRYPTION_KEY else None
 
 def encrypt_data(data: str) -> str:
-    """Шифрует строку"""
+    """Шифрует строку, если задан ключ"""
+    if not cipher_suite:
+        return data
     return cipher_suite.encrypt(data.encode()).decode()
 
 def decrypt_data(encrypted_data: str) -> str:
-    """Дешифрует строку"""
-    return cipher_suite.decrypt(encrypted_data.encode()).decode()
+    """Дешифрует строку, если задан ключ"""
+    if not cipher_suite:
+        return encrypted_data
+    try:
+        return cipher_suite.decrypt(encrypted_data.encode()).decode()
+    except Exception:
+        # Если данные не зашифрованы или ключ неверный, возвращаем как есть
+        return encrypted_data
 
 # Путь к БД относительно корня проекта
 BASE_DIR = Path(__file__).parent.parent.parent
