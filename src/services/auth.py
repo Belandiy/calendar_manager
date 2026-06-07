@@ -3,6 +3,7 @@ import logging
 from google_auth_oauthlib.flow import Flow
 from src.services.db import save_user
 from src.config import settings
+from src.services.db import save_reminder
 
 # Разрешаем HTTP для разработки (Google OAuth требует HTTPS по умолчанию)
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
@@ -53,6 +54,10 @@ async def process_auth_response(telegram_id: int, username: str, auth_response_u
         
         # Сохраняем токены в БД
         await save_user(telegram_id, username, creds.to_json())
+        
+        # Устанавливаем напоминание по умолчанию (30 минут)
+        await save_reminder(telegram_id, 30)
+        
         return True
     except Exception as e:
         logger.error(f"Ошибка при обмене токена для пользователя {telegram_id}: {e}", exc_info=True)
