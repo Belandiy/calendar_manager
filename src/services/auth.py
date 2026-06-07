@@ -1,19 +1,32 @@
 import os
+import logging
 from google_auth_oauthlib.flow import Flow
 from src.services.db import save_user
+from src.config import settings
 
 # Разрешаем HTTP для разработки (Google OAuth требует HTTPS по умолчанию)
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
+logger = logging.getLogger(__name__)
+
+def get_client_config():
+    """Формирует конфигурацию клиента из настроек в памяти"""
+    return {
+        "installed": {
+            "client_id": settings.GOOGLE_CLIENT_ID,
+            "client_secret": settings.GOOGLE_CLIENT_SECRET,
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+        }
+    }
+
 async def get_google_auth_url() -> tuple[str, str]:
     """
     Генерирует ссылку для авторизации через Google OAuth 2.0.
-    
-    Returns:
-        tuple[str, str]: (URL для авторизации, code_verifier)
     """
-    flow = Flow.from_client_secrets_file(
-        'credentials.json',
+    flow = Flow.from_client_config(
+        get_client_config(),
         scopes=['https://www.googleapis.com/auth/calendar'],
         redirect_uri='http://localhost' 
     )
@@ -22,27 +35,13 @@ async def get_google_auth_url() -> tuple[str, str]:
     auth_url, _ = flow.authorization_url(prompt='consent')
     return auth_url, flow.code_verifier
 
-import logging
-
-# Настройка логирования для этого модуля
-logger = logging.getLogger(__name__)
-
 async def process_auth_response(telegram_id: int, username: str, auth_response_url: str, code_verifier: str) -> bool:
     """
     Обменивает присланную пользователем ссылку на токены и сохраняет их в БД.
-    
-    Args:
-        telegram_id: ID пользователя в Telegram
-        username: Имя пользователя
-        auth_response_url: Полный URL редиректа, присланный пользователем
-        code_verifier: Верификатор кода (PKCE), сгенерированный на первом этапе
-        
-    Returns:
-        bool: True если успешно, False иначе
     """
     try:
-        flow = Flow.from_client_secrets_file(
-            'credentials.json',
+        flow = Flow.from_client_config(
+            get_client_config(),
             scopes=['https://www.googleapis.com/auth/calendar'],
             redirect_uri='http://localhost'
         )

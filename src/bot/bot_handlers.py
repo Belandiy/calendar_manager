@@ -43,7 +43,9 @@ async def start_command(message: Message, state: FSMContext):
             "1. Перейди по ссылке: " + auth_url + "\n"
             "2. Авторизуйся и разреши доступ.\n"
             "3. Тебя перекинет на страницу, которая не откроется (localhost) — это нормально.\n"
-            "4. **Скопируй всю ссылку** из адресной строки и пришли её мне."
+            "4. <b>Скопируй всю ссылку</b> из адресной строки и пришли её мне.",
+            parse_mode="HTML",
+            disable_web_page_preview=True
         )
 
 @router.message(Command("events"))
