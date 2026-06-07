@@ -2,4 +2,5 @@ aiogram
 google-api-python-client
 google-auth
 google-auth-oauthlib
-pydantic_settings
+pydantic-settings
+APScheduler==3.10.1

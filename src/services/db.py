@@ -174,3 +174,19 @@ async def get_reminder(telegram_id: int) -> int | None:
         return None
     finally:
         conn.close()
+
+async def get_all_reminders() -> list[tuple[int, int]]:
+    """
+    Получение списка всех пользователей с настройками напоминаний.
+    Returns: список кортежей (telegram_id, reminder_time_minutes)
+    """
+    conn = await get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT telegram_id, reminder_time FROM reminder")
+        return cursor.fetchall()
+    except Exception as e:
+        logger.error(f"Ошибка при получении всех напоминаний: {e}")
+        return []
+    finally:
+        conn.close()
