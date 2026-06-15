@@ -11,7 +11,7 @@ from aiogram.fsm.state import State, StatesGroup
 
 from src.services.db import get_reminder, save_reminder, user_exists
 from src.services.auth import get_google_auth_url, process_auth_response
-from src.services.calendar import get_past_events, get_upcoming_events, format_events
+from src.services.calendar import get_past_events, get_upcoming_events, format_events, TokenRevokedError
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -30,7 +30,8 @@ async def start_command(message: Message, state: FSMContext):
             "Используй команду /events, чтобы увидеть свои ближайшие события.\n"
             "Используй команду /set_reminder, чтобы установить напоминание.\n"
             "Используй команду /show_reminder, чтобы увидеть текущее напоминание.\n"
-            "Используй команду /history, чтобы увидеть историю событий."
+            "Используй команду /history, чтобы увидеть историю событий.\n\n"
+            "Если у тебя возникли проблемы с доступом, используй /reauth для переподключения."
         )
     else:
         auth_url, code_verifier = await get_google_auth_url()
@@ -48,6 +49,22 @@ async def start_command(message: Message, state: FSMContext):
             disable_web_page_preview=True
         )
 
+@router.message(Command("reauth"))
+async def reauth_command(message: Message, state: FSMContext):
+    """Обработчик команды /reauth - принудительное переподключение Google аккаунта"""
+    auth_url, code_verifier = await get_google_auth_url()
+    await state.update_data(code_verifier=code_verifier)
+    await state.set_state(AuthStates.waiting_for_auth_url)
+    await message.answer(
+        "🔄 <b>Переподключение Google Calendar</b>\n\n"
+        "Это поможет, если бот потерял доступ к твоему календарю.\n\n"
+        "1. Перейди по ссылке: " + auth_url + "\n"
+        "2. Авторизуйся и разреши доступ.\n"
+        "3. Скопируй ссылку из адресной строки (localhost) и пришли её мне сюда.",
+        parse_mode="HTML",
+        disable_web_page_preview=True
+    )
+
 @router.message(Command("events"))
 async def events_command(message: Message):
     """Обработчик команды /events - показ ближайших событий"""
@@ -60,13 +77,22 @@ async def events_command(message: Message):
 
     wait_message = await message.answer("🔄 Получаю данные из календаря...")
 
-    events = await get_upcoming_events(user_id, max_results=5)
+    try:
+        events = await get_upcoming_events(user_id, max_results=5)
 
-    if events is None:
-        await wait_message.edit_text("❌ Ошибка авторизации. Попробуйте /start заново.")
-    else:
-        formatted_text = format_events(events, title="Ваши ближайшие события")
-        await wait_message.edit_text(formatted_text, parse_mode="Markdown")
+        if events is None:
+            await wait_message.edit_text("❌ Ошибка при получении событий. Попробуйте позже.")
+        else:
+            formatted_text = format_events(events, title="Ваши ближайшие события")
+            await wait_message.edit_text(formatted_text, parse_mode="Markdown")
+    except TokenRevokedError:
+        await wait_message.edit_text(
+            "❌ Доступ к Google Calendar отозван или недействителен.\n"
+            "Пожалуйста, выполните повторную авторизацию с помощью команды /reauth."
+        )
+    except Exception as e:
+        logger.error(f"Ошибка в events_command: {e}")
+        await wait_message.edit_text("❌ Произошла непредвиденная ошибка.")
 
 @router.message(Command("set_reminder"))
 async def set_reminder(message: Message, command: CommandObject):
@@ -115,13 +141,22 @@ async def show_history(message: Message):
     
     wait_message = await message.answer("🔄 Загружаю историю событий...")
     
-    past_events = await get_past_events(user_id, max_results=10)
+    try:
+        past_events = await get_past_events(user_id, max_results=10)
 
-    if past_events is None:
-        await wait_message.edit_text("❌ Ошибка при получении истории событий.")
-    else:
-        formatted_text = format_events(past_events, title="Ваши последние 10 событий")
-        await wait_message.edit_text(formatted_text, parse_mode="Markdown")
+        if past_events is None:
+            await wait_message.edit_text("❌ Ошибка при получении истории событий.")
+        else:
+            formatted_text = format_events(past_events, title="Ваши последние 10 событий")
+            await wait_message.edit_text(formatted_text, parse_mode="Markdown")
+    except TokenRevokedError:
+        await wait_message.edit_text(
+            "❌ Доступ к Google Calendar отозван или недействителен.\n"
+            "Пожалуйста, выполните повторную авторизацию с помощью команды /reauth."
+        )
+    except Exception as e:
+        logger.error(f"Ошибка в show_history: {e}")
+        await wait_message.edit_text("❌ Произошла непредвиденная ошибка.")
 
 @router.message(AuthStates.waiting_for_auth_url)
 async def handle_auth_url(message: Message, state: FSMContext):

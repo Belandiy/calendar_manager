@@ -5,13 +5,18 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from google.auth.transport.requests import Request
+from google.auth.exceptions import RefreshError
 
-from src.services.db import get_user_token
+from src.services.db import get_user_token, update_user_token
 
 logger = logging.getLogger(__name__)
 
 # Скоупы для доступа к календарю
 SCOPES = ['https://www.googleapis.com/auth/calendar']
+
+class TokenRevokedError(Exception):
+    """Исключение, выбрасываемое когда токен был отозван или стал недействительным"""
+    pass
 
 async def get_calendar_service(telegram_id: int) -> build:
     """Создает и возвращает сервис Google Calendar для пользователя"""
@@ -25,11 +30,21 @@ async def get_calendar_service(telegram_id: int) -> build:
         
         # Если токен просрочен, пробуем обновить
         if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-            # Здесь в идеале нужно сохранить обновленный токен обратно в БД
+            try:
+                creds.refresh(Request())
+                # Сохраняем обновленный токен обратно в БД
+                await update_user_token(telegram_id, creds.to_json())
+            except RefreshError as e:
+                if 'invalid_grant' in str(e):
+                    logger.warning(f"Токен пользователя {telegram_id} отозван или недействителен: {e}")
+                    raise TokenRevokedError(f"Доступ отозван: {e}")
+                raise e
             
         service = build('calendar', 'v3', credentials=creds)
         return service
+    except TokenRevokedError:
+        # Пробрасываем выше, чтобы обработчик бота мог отреагировать
+        raise
     except Exception as e:
         logger.error(f"Ошибка при создании сервиса календаря: {e}")
         return None

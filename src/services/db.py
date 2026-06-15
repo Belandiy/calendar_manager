@@ -129,6 +129,28 @@ async def save_user(telegram_id: int, username: str, google_token: str) -> None:
     finally:
         conn.close()
 
+async def update_user_token(telegram_id: int, google_token: str) -> None:
+    """
+    Обновление только Google токена пользователя
+    
+    Args:
+        telegram_id: ID пользователя в Telegram
+        google_token: JSON строка с токенами Google
+    """
+    encrypted_token = encrypt_data(google_token)
+    conn = await get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            UPDATE users SET google_token = ? WHERE telegram_id = ?
+        """, (encrypted_token, telegram_id))
+        conn.commit()
+        logger.info(f"Токен пользователя {telegram_id} обновлен.")
+    except Exception as e:
+        logger.error(f"Ошибка при обновлении токена пользователя {telegram_id}: {e}")
+    finally:
+        conn.close()
+
 async def get_user_token(telegram_id: int) -> str | None:
     """
     Получение Google токена пользователя по telegram_id
